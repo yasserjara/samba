@@ -1,69 +1,70 @@
 FROM arm64v8/alpine
-COPY qemu-aarch64-static /usr/bin/
-MAINTAINER David Personette <dperson@gmail.com>
 
-# Install samba
-RUN apk --no-cache --no-progress upgrade && \
-    apk --no-cache --no-progress add bash samba shadow tini tzdata && \
+LABEL maintainer="Yasser Jara <yasserjara@gmail.com>"
+
+# Instalar Samba y dependencias
+RUN apk --no-cache upgrade && \
+    apk --no-cache add bash samba shadow tini tzdata && \
     addgroup -S smb && \
-    adduser -S -D -H -h /tmp -s /sbin/nologin -G smb -g 'Samba User' smbuser &&\
+    adduser -S -D -H -h /tmp -s /sbin/nologin -G smb -g 'Samba User' smbuser && \
     file="/etc/samba/smb.conf" && \
-    sed -i 's|^;* *\(log file = \).*|   \1/dev/stdout|' $file && \
-    sed -i 's|^;* *\(load printers = \).*|   \1no|' $file && \
-    sed -i 's|^;* *\(printcap name = \).*|   \1/dev/null|' $file && \
-    sed -i 's|^;* *\(printing = \).*|   \1bsd|' $file && \
-    sed -i 's|^;* *\(unix password sync = \).*|   \1no|' $file && \
-    sed -i 's|^;* *\(preserve case = \).*|   \1yes|' $file && \
-    sed -i 's|^;* *\(short preserve case = \).*|   \1yes|' $file && \
-    sed -i 's|^;* *\(default case = \).*|   \1lower|' $file && \
-    sed -i '/Share Definitions/,$d' $file && \
-    echo '   pam password change = yes' >>$file && \
-    echo '   map to guest = bad user' >>$file && \
-    echo '   usershare allow guests = yes' >>$file && \
-    echo '   create mask = 0664' >>$file && \
-    echo '   force create mode = 0664' >>$file && \
-    echo '   directory mask = 0775' >>$file && \
-    echo '   force directory mode = 0775' >>$file && \
-    echo '   force user = smbuser' >>$file && \
-    echo '   force group = smb' >>$file && \
-    echo '   follow symlinks = yes' >>$file && \
-    echo '   load printers = no' >>$file && \
-    echo '   printing = bsd' >>$file && \
-    echo '   printcap name = /dev/null' >>$file && \
-    echo '   disable spoolss = yes' >>$file && \
-    echo '   strict locking = no' >>$file && \
-    echo '   aio read size = 0' >>$file && \
-    echo '   aio write size = 0' >>$file && \
-    echo '   vfs objects = catia fruit recycle streams_xattr' >>$file && \
-    echo '   recycle:keeptree = yes' >>$file && \
-    echo '   recycle:maxsize = 0' >>$file && \
-    echo '   recycle:repository = .deleted' >>$file && \
-    echo '   recycle:versions = yes' >>$file && \
-    echo '' >>$file && \
-    echo '   # Security' >>$file && \
-    echo '   client ipc max protocol = SMB3' >>$file && \
-    echo '   client ipc min protocol = SMB2_10' >>$file && \
-    echo '   client max protocol = SMB3' >>$file && \
-    echo '   client min protocol = SMB2_10' >>$file && \
-    echo '   server max protocol = SMB3' >>$file && \
-    echo '   server min protocol = SMB2_10' >>$file && \
-    echo '' >>$file && \
-    echo '   # Time Machine' >>$file && \
-    echo '   fruit:delete_empty_adfiles = yes' >>$file && \
-    echo '   fruit:time machine = yes' >>$file && \
-    echo '   fruit:veto_appledouble = no' >>$file && \
-    echo '   fruit:wipe_intentionally_left_blank_rfork = yes' >>$file && \
-    echo '' >>$file && \
+    { \
+        echo "   log file = /dev/stdout"; \
+        echo "   load printers = no"; \
+        echo "   printcap name = /dev/null"; \
+        echo "   printing = bsd"; \
+        echo "   unix password sync = no"; \
+        echo "   preserve case = yes"; \
+        echo "   short preserve case = yes"; \
+        echo "   default case = lower"; \
+        echo "   pam password change = yes"; \
+        echo "   map to guest = bad user"; \
+        echo "   usershare allow guests = yes"; \
+        echo "   create mask = 0664"; \
+        echo "   force create mode = 0664"; \
+        echo "   directory mask = 0775"; \
+        echo "   force directory mode = 0775"; \
+        echo "   force user = smbuser"; \
+        echo "   force group = smb"; \
+        echo "   follow symlinks = yes"; \
+        echo "   disable spoolss = yes"; \
+        echo "   strict locking = no"; \
+        echo "   aio read size = 0"; \
+        echo "   aio write size = 0"; \
+        echo "   vfs objects = catia fruit recycle streams_xattr"; \
+        echo "   recycle:keeptree = yes"; \
+        echo "   recycle:maxsize = 0"; \
+        echo "   recycle:repository = .deleted"; \
+        echo "   recycle:versions = yes"; \
+        echo ""; \
+        echo "   # Security"; \
+        echo "   client ipc max protocol = SMB3"; \
+        echo "   client ipc min protocol = SMB2_10"; \
+        echo "   client max protocol = SMB3"; \
+        echo "   client min protocol = SMB2_10"; \
+        echo "   server max protocol = SMB3"; \
+        echo "   server min protocol = SMB2_10"; \
+        echo ""; \
+        echo "   # Time Machine"; \
+        echo "   fruit:delete_empty_adfiles = yes"; \
+        echo "   fruit:time machine = yes"; \
+        echo "   fruit:veto_appledouble = no"; \
+        echo "   fruit:wipe_intentionally_left_blank_rfork = yes"; \
+    } > $file && \
     rm -rf /tmp/*
 
+# Copiar el script de entrada de Samba
 COPY samba.sh /usr/bin/
 
+# Exponer puertos necesarios
 EXPOSE 137/udp 138/udp 139 445
 
+# Configurar Healthcheck
 HEALTHCHECK --interval=60s --timeout=15s \
-            CMD smbclient -L \\localhost -U % -m SMB3
+    CMD smbclient -L \\localhost -U % -m SMB3 || exit 1
 
-VOLUME ["/etc", "/var/cache/samba", "/var/lib/samba", "/var/log/samba",\
-            "/run/samba"]
+# Definir volúmenes
+VOLUME ["/etc", "/var/cache/samba", "/var/lib/samba", "/var/log/samba", "/run/samba"]
 
+# Configurar el entrypoint
 ENTRYPOINT ["/sbin/tini", "--", "/usr/bin/samba.sh"]
